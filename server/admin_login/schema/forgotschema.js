@@ -1,16 +1,16 @@
-const mongoose = require("mongoose");
+// const mongoose = require("mongoose");
 
-const forgotPassSchema = new mongoose.Schema({
-    newpassword: {
-        type: String,
-        required: true,
-        unique: true,
-    },
-    confirmpassword: {
-        type: String,
-        required: true,
-        unique: true,
-    }
-});
+// const forgotPassSchema = new mongoose.Schema({
+//     password: {
+//         type: String,
+//         required: true,
+//         unique: true,
+//     },
+//     // confirmpassword: {
+//     //     type: String,
+//     //     required: true,
+//     //     unique: true,
+//     // }
+// });
 
-module.exports = mongoose.model("Forgot-Pass", forgotPassSchema);
+// module.exports = mongoose.model("Forgot-Pass", forgotPassSchema);

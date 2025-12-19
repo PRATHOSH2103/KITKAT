@@ -1,12 +1,17 @@
-const mongoose = require("mongoose");
+// const mongoose = require("mongoose");
 
-const forgotEmailSchema = new mongoose.Schema({
-    email: {
-        type: String,
-        required: true,
-        unique: true,
-        
-    }
-});
+// const forgotEmailSchema = new mongoose.Schema({
+//     email: String,
+//     userId: {
+//         type: mongoose.Schema.Types.ObjectId,
+//         ref: "User",
+//     },
+//     // resetPasswordToken:String,
+//     // resetToken: String,
+//     // resetExpire: Date,
 
-module.exports = mongoose.model("Forgot-email", forgotEmailSchema);
+// });
+
+
+
+// module.exports = mongoose.model("Forgot-email", forgotEmailSchema);

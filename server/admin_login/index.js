@@ -1,7 +1,8 @@
 require("dotenv").config();
-const cors = require("cors")
 
 const express = require("express");
+
+const cors = require("cors")
 
 const bcrypt = require("bcryptjs")
 
@@ -11,18 +12,16 @@ const jwt = require("jsonwebtoken")
 
 const router = require("./crud/router")
 
-const dataschema = require("./schema/schema");
-
-const forgotEmailSchema = require("./schema/emailschema");
-
-// const forgotPassSchema = require("../schema/forgotschema");
-
 const dotenv = require("dotenv");
+
+const userSchema = require("./schema/schema")
 
 const mongoose = require("mongoose");
 
 
 const app = express();
+
+const PORT = process.env.PORT || 4004;
 
 app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
 
@@ -48,3 +47,8 @@ app.listen(process.env.PORT, () => {
     console.log(`server is running on port ${process.env.PORT}`);
 
 });
+
+
+
+
+
