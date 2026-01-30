@@ -1,21 +1,24 @@
-// const User = require("../schema/schema");
-// const crypto = require("crypto");
-// const nodemailer = require("nodemailer");
-// // const bcrypt = require("bcryptjs");
-
-
-// import jwt from "jsonwebtoken";
-// import crypto from "crypto";
-// import bcrypt from "bcryptjs";
-// import nodemailer from "nodemailer";
-// import User from "../schema/schema.js";
-
-
+const multer = require("multer")
 const User = require("../schema/schema");
+const Student = require("../schema/studentschema")
+const StudentCounter = require("../schema/counter")
+const Employee = require("../schema/employeeSchema")
+const EmployeeCounter = require("../schema/employeeCounter")
+
+const Attendance = require("../schema/attendanceSchema");
+
+const Customer = require("../schema/customerSchema");
+const CustomerInvoiceCounter = require("../schema/InvoiceCounterSchema");
+
+
+const Invoice = require ("../schema/InvoiceGSTSchema");
+
+
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const bcrypt = require("bcryptjs");
-const jwt = require ("jsonwebtoken")
+const jwt = require("jsonwebtoken")
+
 
 // READ
 const getMethodfun = async (req, res) => {
@@ -35,31 +38,43 @@ const getMethodfun = async (req, res) => {
 
 // REGISTER
 const postMethodfun = async (req, res) => {
-
   try {
-    const hassPass = await bcrypt.hash(req.body.password, 10);
-    const createData = new User({
-      ...req.body,
-      password: hassPass
+    const { name, email, password } = req.body;
+
+    const hashedPass = await bcrypt.hash(password, 10);
+
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPass,
+      role: "admin"
     });
 
-    let saveData = await createData.save();
+    res.status(201).json({
+      msg: "Registered successfully",
+      saveData: {
+        id: user._id,
+        name: user.name,
+        role: user.role
+      }
+    });
 
-
-    res.json({ msg: "Registered successfully", saveData });
   } catch (error) {
-    res.json(error);
+    res.status(400).json({ msg: error.message });
   }
-};  
+};
+
+
 
 // LOGIN
 const loginMethod = async (req, res) => {
 
+  // console.log("BODY:", req.body);
 
   try {
     const { name, password } = req.body;
 
-    let user = await User.findOne({ name });
+    let user = await User.findOne({ name }).select("+password");
 
     if (!user) return res.status(400).json({ success: false, msg: "Name not found" });
 
@@ -67,30 +82,31 @@ const loginMethod = async (req, res) => {
 
     if (!existingpass) return res.status(400).json({ success: false, msg: "Password is incorrect" });
 
-
     const token = jwt.sign(
       {
         id: user._id,
         role: user.role,
         name: user.name
       },
-      process.env.SECRETKEY
+      process.env.SECRETKEY,
+      { expiresIn: "1d" }
     );
 
-    res.json({
+
+    return res.status(200).json({
       msg: "Login successful",
-      token,
-      user: {
+      saveData: {
         id: user._id,
         name: user.name,
         role: user.role
-      }
+      },
+      token
     });
 
 
-
   } catch (error) {
-    res.json(error);
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message })
   }
 
 
@@ -101,7 +117,7 @@ const loginMethod = async (req, res) => {
 
 const forgotPassword = async (req, res) => {
   try {
- const { email } = req.body;
+    const { email } = req.body;
     if (!email)
       return res.status(400).json({ msg: "Email required" });
 
@@ -122,7 +138,7 @@ const forgotPassword = async (req, res) => {
 
     const resetLink = `http://localhost:3000/reset-password/${resetToken}`;
 
-   const transporter = nodemailer.createTransport({
+    const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
         user: process.env.EMAIL_USER,
@@ -150,9 +166,7 @@ const forgotPassword = async (req, res) => {
 };
 
 
-
-
- // RESET PASSWORD
+// RESET PASSWORD
 
 const resetPassword = async (req, res) => {
   try {
@@ -194,59 +208,539 @@ const resetPassword = async (req, res) => {
 };
 
 
-//  VERIFY TOKEN
+//  VERIFY TOKEN  
 
 const verifyToken = async (req, res, next) => {
-
 
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
-    return res.status(401).json({ msg: "Token required" });
+    return res.status(401).json({ msg: "No token provided" });
   }
 
+  // MUST split Bearer
   const token = authHeader.split(" ")[1];
 
-  // console.log(token);
+  if (!token) {
+    return res.status(401).json({ msg: "Invalid token format" });
+  }
 
-  jwt.verify(token, process.env.SECRETKEY, (err, decoded) => {
-    if (err) {
-      return res.status(401).json({ msg: "Invalid token" });
-    }
-
-    if (decoded.role !== "admin") {
-      return res.status(403).json({ message: "Admin access only" });
-    }
-
+  try {
+    const decoded = jwt.verify(token, process.env.SECRETKEY);
     req.user = decoded;
     next();
-  });
+  } catch (err) {
+    return res.status(401).json({ msg: "Token invalid or expired" });
+  }
 
 
+};
+
+
+// create student id 
+
+
+const addStudentDetails = async (req, res) => {
+  try {
+    // 1️⃣ Increment counter ONLY when saving
+    const counter = await StudentCounter.findOneAndUpdate(
+      {},
+      { $inc: { lastNumber: 1 } },
+      { new: true, upsert: true }
+    );
+
+    // 2️⃣ Generate permanent student ID
+    const studentId = `KIT-${counter.lastNumber + 10000}`;
+
+    // 3️⃣ Save student WITH ID
+    const student = new Student({
+      ...req.body,
+      studentId,
+      uploadPhoto: req.file?.path || null
+    });
+
+    await student.save();
+
+    res.status(201).json({
+      message: "Student added successfully",
+      student
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+const createStudentId = async (req, res) => {
+  try {
+    const counter = await StudentCounter.findOne({});
+    const lastNumber = counter?.lastNumber || 0;
+
+    const studentId = `KIT-${lastNumber + 10001}`;
+
+    res.status(200).json({ studentId });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+const getAllStudents = async (req, res) => {
+  try {
+    const students = await Student.find().sort({ createdAt: 1 });
+    res.status(200).json(students);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+// // Get student by ID to update
+const getStudentById = async (req, res) => {
+  try {
+    const student = await Student.findById(req.params.id);
+    if (!student) return res.status(404).json({ message: "Student not found" });
+    res.json(student);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+// // UPDATE student
+const updateStudent = async (req, res) => {
+  try {
+    const student = await Student.findById(req.params.id);
+    if (!student) return res.status(404).json({ message: "Student not found" });
+
+    Object.assign(student, req.body);
+
+    if (req.file) student.uploadPhoto = req.file.path;
+
+    await student.save();
+    res.json(student);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+// // DELETE student
+const deleteStudent = async (req, res) => {
+  try {
+    const student = await Student.findById(req.params.id);
+
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    await student.deleteOne(); // or Student.findByIdAndDelete(req.params.id)
+
+    res.status(200).json({ message: "Student deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+// create employee id
+
+const createEmployeeId = async (req, res) => {
+  try {
+    const EMPcounter = await EmployeeCounter.findOne({});
+    const lastNumber = EMPcounter?.lastNumber || 0;
+
+    const employeeId = `EMP-${lastNumber + 10001}`;
+
+    res.status(200).json({ employeeId });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+const addEmployeeDetails = async (req, res) => {
+  try {
+    // 1️⃣ Generate next employee ID
+    const EMPcounter = await EmployeeCounter.findOneAndUpdate(
+      {},
+      { $inc: { lastNumber: 1 } },
+      { new: true, upsert: true }
+    );
+
+    const numericPart = EMPcounter.lastNumber + 10000;
+    const employeeId = `EMP-${numericPart}`;
+
+    // 2️⃣ Create employee with generated ID
+    const employee = new Employee({
+      ...req.body,
+      employeeId,
+      uploadPhoto: req.file?.path || null
+    });
+
+    await employee.save();
+
+    res.status(201).json({
+      message: "Employee added successfully",
+      employee
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+const getAllEmployee = async (req, res) => {
+  try {
+    const employee = await Employee.find().sort({ createdAt: 1 });
+    res.status(200).json(employee);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+// // Get employee by ID to update
+const getEmployeeById = async (req, res) => {
+  try {
+    const employee = await Employee.findById(req.params.id);
+    if (!employee) return res.status(404).json({ message: "Employee not found" });
+    res.json(employee);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+// // UPDATE employee
+const updateEmployee = async (req, res) => {
+  try {
+
+    const employee = await Employee.findById(req.params.id);
+    if (!employee) return res.status(404).json({ message: "employee not found" });
+
+    Object.assign(employee, req.body);
+
+    if (req.file) employee.uploadPhoto = req.file.path;
+
+    await employee.save();
+    res.json(employee);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+// // DELETE employee
+const deleteEmployee = async (req, res) => {
+  try {
+    const employee = await Employee.findById(req.params.id);
+
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    await employee.deleteOne(); // or Employee.findByIdAndDelete(req.params.id)
+
+    res.status(200).json({ message: "Employee deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+// ADD Attendance 
+
+
+const addAttendance = async (req, res) => {
+  try {
+    const attendance = new Attendance(req.body);
+    await attendance.save();
+
+    res.status(201).json({
+      message: "Attendance added successfully",
+      attendance
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+const getAllAttendance = async (req, res) => {
+  try {
+    const attendance = await Attendance.find()
+      .populate("employeeId", "firstName employeeId email designation")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(attendance);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// GET attendance by ID
+const getAttendanceById = async (req, res) => {
+  try {
+    const attendance = await Attendance.findById(req.params.id)
+      .populate("employeeId", "firstName employeeId");
+
+    if (!attendance) {
+      return res.status(404).json({ message: "Attendance not found" });
+    }
+
+    res.json(attendance);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// UPDATE attendance
+const updateAttendance = async (req, res) => {
+  try {
+    const attendance = await Attendance.findById(req.params.id);
+
+    if (!attendance) {
+      return res.status(404).json({ message: "Attendance not found" });
+    }
+
+    Object.assign(attendance, req.body);
+    await attendance.save();
+
+    res.json({
+      message: "Attendance updated successfully",
+      attendance
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+// // DELETE attendance
+const deleteAttendance = async (req, res) => {
+  try {
+    const attendance = await Attendance.findByIdAndDelete(req.params.id);
+
+    if (!attendance) {
+      return res.status(404).json({ message: "Attendance not found" });
+    }
+
+    res.json({ message: "Attendance deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+// customer invoice create
+const createCustometInvoiceId = async (req, res) => {
+  try {
+    const year = new Date().getFullYear().toString().slice(-2);
+
+    //  just read counter
+    const counter = await CustomerInvoiceCounter.findOne({ year });
+    const lastNumber = counter?.lastNumber || 0;
+
+    const invoiceNumber = (lastNumber + 1).toString().padStart(3, "0");
+    const invoiceId = `KIT/${year}/${invoiceNumber}`;
+
+    res.status(200).json({ invoiceId });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+const createCustomer = async (req, res) => {
+  try {
+    const year = new Date().getFullYear().toString().slice(-2);
+
+    //  increment only when saving customer
+    const counter = await CustomerInvoiceCounter.findOneAndUpdate(
+      { year },
+      { $inc: { lastNumber: 1 } },
+      { new: true, upsert: true }
+    );
+
+    const invoiceNumber = counter.lastNumber.toString().padStart(3, "0");
+    const invoiceId = `KIT/${year}/${invoiceNumber}`;
+
+    const customer = await Customer.create({
+      ...req.body,
+      InvoiceNo: invoiceId   
+    });
+
+    res.status(201).json(customer);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+
+
+const getAllCustomers = async (req, res) => {
+  try {
+    const customers = await Customer.find().sort({ createdAt: -1 });
+    res.json(customers);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+const getCustomerById = async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.params.id);
+    if (!customer) return res.status(404).json({ message: "Customer not found" });
+    res.json(customer);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+const updateCustomer = async (req, res) => {
+  try {
+    const customer = await Customer.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    res.json(customer);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+
+
+const deleteCustomer = async (req, res) => {
+  try {
+    await Customer.findByIdAndDelete(req.params.id);
+    res.json({ message: "Customer deleted" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+
+
+// gst
+
+const createInvoice = async (req, res) => {
+  try {
+    const {
+      customerId,
+      InvoiceNo,
+      GSTIN,
+      date,
+      items,
+      subTotal,
+      igst,
+      grandTotal
+    } = req.body;
+
+    // 🔒 Validation
+    if (!customerId || !InvoiceNo || !date || !items?.length) {
+      return res.status(400).json({
+        message: "Missing required invoice fields"
+      });
+    }
+
+    const invoice = new Invoice({
+      customerId,
+      InvoiceNo,
+      GSTIN,
+      date,
+      items,
+      subTotal,
+      igst,
+      grandTotal
+    });
+
+    await invoice.save();
+
+    res.status(201).json({
+      message: "Invoice saved successfully",
+      invoice
+    });
+  } catch (error) {
+    console.error("INVOICE SAVE ERROR:", error);
+    res.status(500).json({
+      message: "Failed to save invoice",
+      error: error.message
+    });
+  }
 };
 
 
 module.exports = {
-    getMethodfun,
-    postMethodfun,
-    loginMethod,
-    forgotPassword,
-    resetPassword,
-    verifyToken
+  getMethodfun,
+  postMethodfun,
+  loginMethod,
+  forgotPassword,
+  resetPassword,
+  verifyToken,
+
+
+  createStudentId,
+  addStudentDetails,
+  getAllStudents,
+
+  createEmployeeId,
+  addEmployeeDetails,
+  getAllEmployee,
+
+
+
+  getStudentById,
+  updateStudent,
+  deleteStudent,
+
+
+
+  getEmployeeById,
+  updateEmployee,
+  deleteEmployee,
+
+
+  addAttendance,
+  getAllAttendance,
+
+  getAttendanceById,
+  updateAttendance,
+  deleteAttendance,
+
+
+
+  createCustometInvoiceId,
+   createCustomer,
+  getAllCustomers,
+  getCustomerById,
+  updateCustomer,
+  deleteCustomer,
+
+
+  createInvoice
+
 
 };
-
-
-// export {
-//   getMethodfun,
-//   loginMethod,
-//   forgotPassword,
-//   resetPassword,
-//   verifyToken,
-//   postMethodfun
-// };
-
-
 
 
 

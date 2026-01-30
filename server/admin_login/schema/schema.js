@@ -1,61 +1,6 @@
-// const mongoose = require("mongoose");
-
-// const User = mongoose.Schema({
-
-//     role: {
-//         type: String,
-//         default: "admin",
-//         enum: ["admin"],
-//         lowercase: true,
-//         trim: true
-//     },
-
-//     name: {
-
-//         type: String,
-//         required: true,
-//         unique: true
-//     },
-//     password: {
-
-//         type: String,
-//         required: true,
-//     },
-//     email: {
-
-//         type: String,
-//         required: true,
-//         unique: true,
-//         lowercase: true,
-//         trim: true
-//     },
-
-
-//     resetPasswordToken: {
-//         type: String,
-//     },
-
-//     resetPasswordExpire
-//         : {
-//         type: Date,
-//     },
-
-//     passwordChangedAt: {
-//         type: Date,
-//     },
-
-// });
-
-
-
-// module.exports = mongoose.model("logindata", User);
-
-
-
 
 const mongoose = require("mongoose");
 
-// import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
     {
@@ -67,8 +12,6 @@ const userSchema = new mongoose.Schema(
 
         email: {
             type: String,
-            required: true,
-            unique: true,
             lowercase: true
         },
 
@@ -107,4 +50,3 @@ const userSchema = new mongoose.Schema(
 
 
 module.exports = mongoose.model("User", userSchema);
-// export default mongoose.model("User", userSchema);

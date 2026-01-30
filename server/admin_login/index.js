@@ -10,6 +10,8 @@ const nodemailer = require("nodemailer")
 
 const jwt = require("jsonwebtoken")
 
+const multer = require("multer")
+
 const router = require("./crud/router")
 
 const dotenv = require("dotenv");
@@ -21,14 +23,13 @@ const mongoose = require("mongoose");
 
 const app = express();
 
-const PORT = process.env.PORT || 4004;
-
 app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
 
 app.use(express.json());
 
-app.use("/api", router);
-
+app.use("/api", router);    
+app.use("/student", router);    
+   
 
 mongoose.connect(process.env.DB)
     .then(() => {
