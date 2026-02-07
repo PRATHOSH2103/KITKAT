@@ -28,11 +28,18 @@ const upload = multer({ storage });
 const { getMethodfun, postMethodfun, loginMethod, forgotPassword, resetPassword, verifyToken,
     createStudentId, addStudentDetails, getAllStudents, createEmployeeId,
     addEmployeeDetails,
-    getAllEmployee, updateStudent, getStudentById, deleteStudent, 
-    getEmployeeById,updateEmployee,deleteEmployee,
-    addAttendance,getAllAttendance ,getAttendanceById,updateAttendance, deleteAttendance,
-    createCustometInvoiceId , createCustomer,getAllCustomers,getCustomerById,
-     updateCustomer,deleteCustomer , createInvoice} = require("./crud");
+    getAllEmployee, updateStudent, getStudentById, deleteStudent,
+    getEmployeeById, updateEmployee, deleteEmployee,
+    addAttendance, getAllAttendance, getAttendanceById, updateAttendance, deleteAttendance,
+    createCustometInvoiceId, createCustomer, getAllCustomers, getCustomerById,
+    updateCustomer, deleteCustomer, createInvoice,
+
+    createVendor, getAllVendors, getVendorById, updateVendor, deleteVendor,
+    createLead,
+    getAllLeads,
+    getLeadById,
+    updateLead,
+    deleteLead } = require("./crud");
 
 const router = express.Router();
 
@@ -113,6 +120,22 @@ router.delete("/customer/:id", verifyToken, deleteCustomer);
 
 
 router.post("/invoice", verifyToken, createInvoice);
+
+
+
+router.post("/vendor", verifyToken, createVendor);
+router.get("/vendor", verifyToken, getAllVendors);
+router.get("/vendor/:id", verifyToken, getVendorById);
+router.put("/vendor/:id", verifyToken, updateVendor);
+router.delete("/vendor/:id", verifyToken, deleteVendor);
+
+
+
+router.post("/leads", verifyToken, createLead);
+router.get("/leads", verifyToken, getAllLeads);
+router.get("/leads/:id", verifyToken, getLeadById);
+router.put("/leads/:id", verifyToken, updateLead);
+router.delete("/leads/:id", verifyToken, deleteLead);
 
 
 module.exports = router;

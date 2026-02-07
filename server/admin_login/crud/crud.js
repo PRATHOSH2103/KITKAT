@@ -10,8 +10,14 @@ const Attendance = require("../schema/attendanceSchema");
 const Customer = require("../schema/customerSchema");
 const CustomerInvoiceCounter = require("../schema/InvoiceCounterSchema");
 
+const Vendor = require("../schema/vendorschema")
 
-const Invoice = require ("../schema/InvoiceGSTSchema");
+const puppeteer = require("puppeteer");
+
+
+const Invoice = require("../schema/InvoiceGSTSchema");
+
+const Lead = require ("../schema/leadSchema")
 
 
 const crypto = require("crypto");
@@ -581,7 +587,7 @@ const createCustomer = async (req, res) => {
 
     const customer = await Customer.create({
       ...req.body,
-      InvoiceNo: invoiceId   
+      InvoiceNo: invoiceId
     });
 
     res.status(201).json(customer);
@@ -639,9 +645,8 @@ const deleteCustomer = async (req, res) => {
 
 
 
-
-
 // gst
+
 
 const createInvoice = async (req, res) => {
   try {
@@ -656,14 +661,16 @@ const createInvoice = async (req, res) => {
       grandTotal
     } = req.body;
 
-    // 🔒 Validation
-    if (!customerId || !InvoiceNo || !date || !items?.length) {
-      return res.status(400).json({
-        message: "Missing required invoice fields"
-      });
+    if (!customerId || !InvoiceNo || !items?.length) {
+      return res.status(400).json({ message: "Missing invoice data" });
     }
 
-    const invoice = new Invoice({
+    const subTotalFormatted = Number(subTotal).toFixed(2);
+    const igstFormatted = Number(igst).toFixed(2);
+    const grandTotalFormatted = Number(grandTotal).toFixed(2);
+
+    // ✅ Save invoice in DB
+    await Invoice.create({
       customerId,
       InvoiceNo,
       GSTIN,
@@ -674,20 +681,325 @@ const createInvoice = async (req, res) => {
       grandTotal
     });
 
-    await invoice.save();
 
-    res.status(201).json({
-      message: "Invoice saved successfully",
-      invoice
+    const html = `
+    <html>
+      <head>
+<style>
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 40px;
+    color: #000;
+    font-size: 14px;
+  }
+
+  .invoice-title {
+    text-align: center;
+    font-size: 28px;
+    font-weight: bold;
+    margin-bottom: 40px;
+  }
+
+  .invoice-details {
+    width: 100%;
+    margin-bottom: 30px;
+  }
+
+  .invoice-details p {
+    margin: 6px 0;
+    font-size: 15px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    padding:20px;
+  }
+
+  table th {
+    border: 1px solid #000;
+    padding: 10px;
+    text-align: center;
+    background-color: #f5f5f5;
+    font-weight: bold;
+  }
+
+  table td {
+    border: 1px solid #000;
+    padding: 10px;
+    text-align: center;
+  }
+
+  table td:first-child {
+    text-align: left;
+  }
+
+  .totals {
+    margin-top: 30px;
+    width: 100%;
+  }
+
+.totals-row {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  margin: 8px 0;
+}
+
+.label {
+  min-width: 120px; 
+}
+
+.colon {
+  margin: 0 8px;
+}
+
+.value {
+  margin-left: auto;
+  font-weight: 600;
+}
+
+
+  .grand-total {
+    margin-top: 20px;
+    font-size: 22px;
+    font-weight: bold;
+    text-align: right;
+  }
+</style>
+
+      </head>
+    <body>
+  <br/>
+  <br/>
+  <br/>
+  <div class="invoice-title">INVOICE</div>
+  <h3>KITKAT SOFTWARE TECHNOLOGIES<h3>
+
+  <div class="invoice-details">
+    <p><strong>Invoice No:</strong> ${InvoiceNo}</p>
+    <p><strong>GSTIN:</strong> ${GSTIN}</p>
+    <p><strong>Date:</strong> ${new Date(date).toLocaleDateString()}</p>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 50%">Description</th>
+        <th style="width: 15%">Qty</th>
+        <th style="width: 20%">Unit Price(INR)</th>
+        <th style="width: 30%">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${items.map(i => `
+<tr>
+  <td>${i.description}</td>
+  <td>${i.qty}</td>
+  <td>₹${(Number(i.total) / Number(i.qty)).toFixed(2)}</td>
+  <td>₹${Number(i.total).toFixed(2)}</td>
+</tr>
+
+      `).join("")}
+    </tbody>
+  </table>
+<br/>
+<div class="totals">
+  <div class="totals-row">
+    <span class="label">Sub Total</span>
+    <span class="colon">:</span>
+    <span class="value">₹${subTotalFormatted}</span>
+  </div>
+
+  <div class="totals-row">
+    <span class="label">IGST (18%)</span>
+    <span class="colon">:</span>
+    <span class="value">₹${igstFormatted}</span>
+  </div>
+</div>
+<br/>
+  <div class="grand-total">
+    Grand Total: ₹${grandTotalFormatted}
+  </div>
+</body>
+
+    </html>
+    `;
+
+
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"]
     });
+
+    const page = await browser.newPage();
+    await page.setContent(html, {
+      waitUntil: "domcontentloaded",
+      timeout: 0
+    });
+    await page.emulateMediaType("screen");
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true
+    });
+
+    await browser.close();
+
+    //  Send PDF correctly
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename=Invoice_${InvoiceNo}.pdf`
+    );
+    res.setHeader("Content-Length", pdfBuffer.length);
+
+    return res.end(pdfBuffer);
+
   } catch (error) {
-    console.error("INVOICE SAVE ERROR:", error);
-    res.status(500).json({
-      message: "Failed to save invoice",
-      error: error.message
-    });
+    console.error("PDF ERROR 👉", error);
+    return res.status(500).json({ message: error.message });
   }
 };
+
+
+
+// create vendor 
+
+
+const createVendor = async (req, res) => {
+  try {
+    const vendor = await Vendor.create(req.body);
+    res.status(201).json({
+      message: "Vendor created successfully",
+      vendor
+    });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+const getAllVendors = async (req, res) => {
+  try {
+    const vendors = await Vendor.find().sort({ createdAt: -1 });
+    res.status(200).json(vendors);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+const getVendorById = async (req, res) => {
+  try {
+    const vendor = await Vendor.findById(req.params.id);
+    if (!vendor) {
+      return res.status(404).json({ message: "Vendor not found" });
+    }
+    res.json(vendor);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+const updateVendor = async (req, res) => {
+  try {
+    const vendor = await Vendor.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+
+    if (!vendor) {
+      return res.status(404).json({ message: "Vendor not found" });
+    }
+
+    res.json({
+      message: "Vendor updated successfully",
+      vendor
+    });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+
+const deleteVendor = async (req, res) => {
+  try {
+    const vendor = await Vendor.findByIdAndDelete(req.params.id);
+    if (!vendor) {
+      return res.status(404).json({ message: "Vendor not found" });
+    }
+    res.json({ message: "Vendor deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+
+const createLead = async (req, res) => {
+  try {
+    const lead = await Lead.create(req.body);
+    res.status(201).json(lead);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+const getAllLeads = async (req, res) => {
+  try {
+    const leads = await Lead.find().sort({ createdAt: -1 });
+    res.json(leads);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+const getLeadById = async (req, res) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+    res.json(lead);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+const updateLead = async (req, res) => {
+  try {
+    const lead = await Lead.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    res.json(lead);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+
+const deleteLead = async (req, res) => {
+  try {
+    await Lead.findByIdAndDelete(req.params.id);
+    res.json({ message: "Lead deleted" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
 
 
 module.exports = {
@@ -730,14 +1042,29 @@ module.exports = {
 
 
   createCustometInvoiceId,
-   createCustomer,
+  createCustomer,
   getAllCustomers,
   getCustomerById,
   updateCustomer,
   deleteCustomer,
 
 
-  createInvoice
+  createInvoice,
+
+
+  createVendor,
+  getAllVendors,
+  getVendorById,
+  updateVendor,
+  deleteVendor,
+
+
+
+  createLead,
+getAllLeads,
+getLeadById,
+updateLead,
+deleteLead
 
 
 };
